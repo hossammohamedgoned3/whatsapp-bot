@@ -1,16 +1,22 @@
-// whatsapp-bot.js - البوت المتطور بالكامل
+// whatsapp-bot.js - نسخة معدلة للنشر على السحابة (Railway, Render, إلخ)
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
 const axios = require('axios');
 const mime = require('mime-types');
-const franc = require('franc');
 require('dotenv').config();
+
+// معالجة الرفض غير المعالج
 process.on('unhandledRejection', (reason, promise) => {
     console.error('❌ خطأ غير معالج:', reason);
 });
+
+// التحقق من وجود مفتاح Gemini
+if (!process.env.GEMINI_API_KEY) {
+    console.error('❌ مفتاح GEMINI_API_KEY غير موجود في متغيرات البيئة');
+    process.exit(1);
+}
 
 // إعدادات Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -18,7 +24,7 @@ const textModel = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
 const visionModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash-image" });
 
 // ذاكرة المحادثة لكل مستخدم (تخزين آخر 10 تفاعلات)
-const userMemory = new Map(); // key: userId (رقم المرسل), value: array of {role, content}
+const userMemory = new Map();
 
 // قوائم داخلية للأوامر السريعة
 const jokes = [
@@ -32,15 +38,19 @@ const facts = [
     "الكنغر لا يستطيع المشي للخلف."
 ];
 
-// مجلد الصور الخاص بك (تأكد من وجوده)
-const imagesFolder = "C:\\Users\\USER\\Desktop\\تصميم ماري جاهز";
+// مجلد الصور - في السحابة يمكنك استخدام متغير بيئة أو مسار نسبي
+// سنستخدم مجلد "images" داخل المشروع (أنشئه إن أردت)، أو تركه فارغاً مع رسالة مناسبة
+const imagesFolder = process.env.IMAGES_FOLDER || path.join(__dirname, 'images');
+if (!fs.existsSync(imagesFolder)) {
+    fs.mkdirSync(imagesFolder, { recursive: true });
+    console.log(`📁 مجلد الصور تم إنشاؤه: ${imagesFolder} (يمكنك إضافة صورك هنا)`);
+}
 
-// تهيئة بوت واتساب
+// تهيئة بوت واتساب - بدون executablePath (للاستخدام في السحابة)
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-        headless: false,  // تأكد أنها false (للتشغيل المرئي)
+        headless: true,   // في السحابة لا توجد واجهة رسومية
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -48,32 +58,25 @@ const client = new Client({
             '--disable-accelerated-2d-canvas',
             '--disable-gpu'
         ],
-        timeout: 120000,         // مهلة تحميل الصفحة 120 ثانية
-        protocolTimeout: 180000  // مهلة بروتوكول المصادقة
+        timeout: 120000,
+        protocolTimeout: 180000
     }
 });
 
-// عرض رمز QR كملف HTML
+// عرض رمز QR في سجلات الطرفية (بدون ملف HTML ولا exec)
 client.on('qr', (qr) => {
-    const htmlContent = `<!DOCTYPE html>
-    <html>
-    <head><meta charset="UTF-8"><title>WhatsApp Bot QR</title></head>
-    <body style="text-align:center;font-family:Arial;padding-top:50px;">
-        <h2>📱 امسح رمز QR باستخدام هاتفك</h2>
-        <img src="https://quickchart.io/qr?text=${encodeURIComponent(qr)}&size=300" />
-        <p>افتح واتساب → الأجهزة المرتبطة → ربط جهاز</p>
-    </body>
-    </html>`;
-    const qrFilePath = path.join(__dirname, 'whatsapp_qr.html');
-    fs.writeFileSync(qrFilePath, htmlContent);
-    console.log(`✅ رمز QR جاهز في الملف: ${qrFilePath}`);
-    exec(`start ${qrFilePath}`);
+    console.log('📱 امسح رمز QR التالي باستخدام هاتفك:');
+    console.log(qr);
+    // إنشاء رابط سهل للمسح عبر quickchart.io
+    const qrLink = `https://quickchart.io/qr?text=${encodeURIComponent(qr)}&size=300`;
+    console.log(`أو افتح هذا الرابط لعرض رمز QR: ${qrLink}`);
 });
 
 // عند الاتصال بنجاح
 client.on('ready', () => {
     console.log('✅ البوت يعمل الآن! جميع الميزات مفعلة.');
 });
+
 // إعادة تشغيل البوت تلقائيًا عند خطأ auth timeout
 client.on('auth_failure', (msg) => {
     console.error('❌ فشل المصادقة:', msg);
@@ -81,6 +84,7 @@ client.on('auth_failure', (msg) => {
     client.destroy();
     setTimeout(() => client.initialize(), 5000);
 });
+
 // دالة للحصول على سياق المحادثة
 function getContext(userId, newUserMessage) {
     if (!userMemory.has(userId)) {
@@ -89,7 +93,6 @@ function getContext(userId, newUserMessage) {
     let history = userMemory.get(userId);
     history.push({ role: "user", content: newUserMessage });
     if (history.length > 10) history.shift();
-    // تحويل التاريخ إلى نص للـ Gemini
     let contextText = "";
     for (let msg of history) {
         contextText += `${msg.role === "user" ? "المستخدم" : "البوت"}: ${msg.content}\n`;
@@ -98,7 +101,6 @@ function getContext(userId, newUserMessage) {
     return contextText;
 }
 
-// دالة لحفظ رد البوت في الذاكرة
 function saveBotReply(userId, reply) {
     let history = userMemory.get(userId) || [];
     history.push({ role: "bot", content: reply });
@@ -106,14 +108,10 @@ function saveBotReply(userId, reply) {
     userMemory.set(userId, history);
 }
 
-// دالة لتحليل الصورة المرسلة
-async function analyzeImage(imageUrl, userQuestion) {
+// دالة لتحليل الصورة المرسلة (تقبل buffer مباشرة)
+async function analyzeImageBuffer(imageBuffer, mimeType, userQuestion) {
     try {
-        // تحميل الصورة من الرابط
-        const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
-        const base64 = Buffer.from(response.data).toString('base64');
-        const mimeType = response.headers['content-type'] || mime.lookup(imageUrl) || 'image/jpeg';
-
+        const base64 = imageBuffer.toString('base64');
         const prompt = userQuestion ? `أنظر إلى هذه الصورة وأجب على السؤال: ${userQuestion}` : "صف هذه الصورة بالتفصيل";
         const result = await visionModel.generateContent([
             prompt,
@@ -126,10 +124,10 @@ async function analyzeImage(imageUrl, userQuestion) {
     }
 }
 
-// دالة لإرسال صورة عشوائية من مجلدك
+// دالة لإرسال صورة عشوائية من مجلد الصور (يعمل في السحابة)
 function sendRandomImage(chat, commandArg) {
     if (!fs.existsSync(imagesFolder)) {
-        return chat.sendMessage("⚠️ مجلد الصور غير موجود. تأكد من المسار: " + imagesFolder);
+        return chat.sendMessage("⚠️ مجلد الصور غير موجود.");
     }
     const files = fs.readdirSync(imagesFolder).filter(f => /\.(jpg|jpeg|png|gif|webp)$/i.test(f));
     if (files.length === 0) return chat.sendMessage("📂 لا توجد صور في المجلد.");
@@ -148,12 +146,12 @@ function sendRandomImage(chat, commandArg) {
 
 // معالجة الرسائل الواردة
 client.on('message', async message => {
-    if (message.fromMe) return; // تجاهل رسائل البوت نفسه
+    if (message.fromMe) return;
     const userId = message.from;
     const msgBody = message.body.trim();
     const chat = await message.getChat();
 
-    // ========== الأوامر السريعة ==========
+    // الأوامر السريعة
     if (msgBody.startsWith('!')) {
         const parts = msgBody.split(' ');
         const command = parts[0].toLowerCase();
@@ -169,22 +167,17 @@ client.on('message', async message => {
             case '!تاريخ':
                 return message.reply(`📅 اليوم: ${new Date().toLocaleDateString('ar-EG')}`);
             case '!لعبة':
-                const choices = ['حجر', 'ورق', 'مقص'];
-                const botChoice = choices[Math.floor(Math.random() * 3)];
-                return message.reply(`🎮 البوت اختار: ${botChoice}. العب أنت الآن! (اكتب حجر، ورق، أو مقص)`);
+                return message.reply(`🎮 البوت اختار: ${['حجر', 'ورق', 'مقص'][Math.floor(Math.random()*3)]}. العب أنت الآن! (اكتب حجر، ورق، أو مقص)`);
             case '!تصميم':
                 return sendRandomImage(chat, arg);
             case '!تذكير':
-                if (!arg) return message.reply("⚠️ استخدم: !تذكير [عدد] [دقيقة/ساعة] [الرسالة] مثال: !تذكير 5 دقيقة شرب ماء");
-                // تنفيذ التذكير (مبسط)
+                if (!arg) return message.reply("⚠️ استخدم: !تذكير [عدد] [دقيقة/ساعة] [الرسالة]");
                 const duration = parseInt(arg);
                 if (isNaN(duration)) return message.reply("⚠️ الرقم غير صحيح.");
                 const unit = parts[2]?.toLowerCase() || 'دقيقة';
                 const reminderText = parts.slice(3).join(' ') || "تذكير دون نص";
                 let ms = duration * (unit.includes('ساعة') ? 3600000 : 60000);
-                setTimeout(() => {
-                    message.reply(`⏰ تذكير: ${reminderText}`);
-                }, ms);
+                setTimeout(() => message.reply(`⏰ تذكير: ${reminderText}`), ms);
                 return message.reply(`✅ سيتم تذكيرك بعد ${duration} ${unit}`);
             case '!kick':
                 if (!chat.isGroup) return message.reply("⚠️ هذا الأمر للمجموعات فقط.");
@@ -193,21 +186,18 @@ client.on('message', async message => {
                 await chat.removeParticipants([mentioned[0].id._serialized]);
                 return message.reply(`🚪 تم طرد ${mentioned[0].pushname}`);
             default:
-                // إذا كان الأمر غير معروف، نمرره للرد الذكي أدناه
+                // أمر غير معروف - يمكن الرد أو تجاهله
                 break;
         }
     }
 
-    // ========== معالجة الصور المرسلة (بدون أمر) ==========
+    // معالجة الصور المرسلة (بدون أمر)
     if (message.hasMedia) {
         try {
             const media = await message.downloadMedia();
-            if (media && (media.mimetype.startsWith('image/'))) {
-                // تحميل الصورة مؤقتاً وتحليلها
-                const tempPath = path.join(__dirname, `temp_${Date.now()}.jpg`);
-                fs.writeFileSync(tempPath, Buffer.from(media.data, 'base64'));
-                const analysis = await analyzeImage(tempPath, msgBody || "ماذا ترى في هذه الصورة؟");
-                fs.unlinkSync(tempPath);
+            if (media && media.mimetype.startsWith('image/')) {
+                const imageBuffer = Buffer.from(media.data, 'base64');
+                const analysis = await analyzeImageBuffer(imageBuffer, media.mimetype, msgBody || "ماذا ترى في هذه الصورة؟");
                 await message.reply(`🖼️ تحليل الصورة:\n${analysis}`);
                 saveBotReply(userId, analysis);
                 return;
@@ -219,7 +209,7 @@ client.on('message', async message => {
         }
     }
 
-    // ========== الرد الذكي على الرسائل النصية ==========
+    // الرد الذكي على الرسائل النصية
     try {
         const context = getContext(userId, msgBody);
         const prompt = `أنت مساعد واتساب ودود. إليك تاريخ المحادثة مع المستخدم:\n${context}\nالرد الآن على آخر رسالة: ${msgBody}\nأجب بلغة المستخدم (عربية أو إنجليزية) وباختصار ولطف.`;
