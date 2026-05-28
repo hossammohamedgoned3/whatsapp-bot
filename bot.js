@@ -41,6 +41,7 @@ const facts = [
 // مجلد الصور - في السحابة يمكنك استخدام متغير بيئة أو مسار نسبي
 // سنستخدم مجلد "images" داخل المشروع (أنشئه إن أردت)، أو تركه فارغاً مع رسالة مناسبة
 const imagesFolder = process.env.IMAGES_FOLDER || path.join(__dirname, 'images');
+
 if (!fs.existsSync(imagesFolder)) {
     fs.mkdirSync(imagesFolder, { recursive: true });
     console.log(`📁 مجلد الصور تم إنشاؤه: ${imagesFolder} (يمكنك إضافة صورك هنا)`);
