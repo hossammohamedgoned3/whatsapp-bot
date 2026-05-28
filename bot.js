@@ -51,16 +51,9 @@ if (!fs.existsSync(imagesFolder)) {
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        // المسار الثابت لـ Google Chrome في بيئة Render (Linux)
-        executablePath: process.env.RENDER ? '/usr/bin/google-chrome' : undefined,
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
         headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--disable-gpu'
-        ],
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
         timeout: 120000,
         protocolTimeout: 180000
     }
