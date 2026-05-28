@@ -1,6 +1,6 @@
 FROM node:20-slim
 
-# تثبيت Google Chrome وتبعياته
+# تثبيت Google Chrome
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
@@ -33,7 +33,6 @@ RUN npm install
 
 COPY . .
 
-# متغير للتعامل مع Chrome في Docker
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 
