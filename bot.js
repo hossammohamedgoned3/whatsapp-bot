@@ -51,7 +51,8 @@ if (!fs.existsSync(imagesFolder)) {
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        headless: true,   // في السحابة لا توجد واجهة رسومية
+        // لا نحدد executablePath هنا، بل نتركه يستخدم المتصفح الذي يجده في PATH
+        headless: true,   // في السحابة، لا واجهة رسومية مطلوبة
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
