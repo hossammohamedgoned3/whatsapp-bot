@@ -51,8 +51,9 @@ if (!fs.existsSync(imagesFolder)) {
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        // لا نحدد executablePath هنا، بل نتركه يستخدم المتصفح الذي يجده في PATH
-        headless: true,   // في السحابة، لا واجهة رسومية مطلوبة
+        // المسار الثابت لـ Google Chrome في بيئة Render (Linux)
+        executablePath: process.env.RENDER ? '/usr/bin/google-chrome' : undefined,
+        headless: true,
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -64,12 +65,20 @@ const client = new Client({
         protocolTimeout: 180000
     }
 });
-
+// للتحقق من وجود Chrome في البيئة (للتشخيص فقط)
+if (process.env.RENDER) {
+    const { execSync } = require('child_process');
+    try {
+        const chromePath = execSync('which google-chrome').toString().trim();
+        console.log(`✅ Chrome found at: ${chromePath}`);
+    } catch (e) {
+        console.error('❌ Chrome not found in PATH');
+    }
+}
 // عرض رمز QR في سجلات الطرفية (بدون ملف HTML ولا exec)
 client.on('qr', (qr) => {
     console.log('📱 امسح رمز QR التالي باستخدام هاتفك:');
     console.log(qr);
-    // إنشاء رابط سهل للمسح عبر quickchart.io
     const qrLink = `https://quickchart.io/qr?text=${encodeURIComponent(qr)}&size=300`;
     console.log(`أو افتح هذا الرابط لعرض رمز QR: ${qrLink}`);
 });
